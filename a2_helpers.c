@@ -1,9 +1,10 @@
 #include "comp310_a2_test.h"
+#include "a2_lib.h"
 
 #define MAGIC_HASH_NUMBER 5381
 
 unsigned long generate_hash(unsigned char *str) {
-	int c;
+	int c = NUM_PODS;
     #ifndef SDBM
 	unsigned long hash = MAGIC_HASH_NUMBER;
 	while (c = *str++)
