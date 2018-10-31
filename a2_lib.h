@@ -12,8 +12,7 @@
 #include <stdbool.h>
 
 #define NUM_PODS 10	//Number of Pods in our table
-#define NUM_RECORDS 100	//Number of kv pairs
-#define NUM_RECORDS_PER_POD (NUM_RECORDS/NUM_PODS) //Load factor
+#define NUM_RECORDS 10	//Number of entries per pod
 #define MAX_NUM_VALUES 5	//Max number of values in a key
 #define MAX_KEY_SIZE 32	//Max size of key in bytes
 #define MAX_VALUE_SIZE 256	//Max value size in bytes

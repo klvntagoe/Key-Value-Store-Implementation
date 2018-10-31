@@ -1,1 +1,0 @@
-For this approach we initialize a large shared space and store kv pairs by altering the index of the address pointing to the shared memory
