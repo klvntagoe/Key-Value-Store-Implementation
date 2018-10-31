@@ -1,4 +1,4 @@
-//clear; gcc -o hash a2_lib.c -lrt; ./hash
+//clear; gcc -o store a2_lib.c -lrt; ./store
 #include "a2_lib.h"
 
 
@@ -57,7 +57,7 @@ int kv_store_write(char *key, char *value){
 	}
 	close(fd);
 
-	hashedKey = hash(key);	//Hashed key
+	hashedKey = hashFunction(key);	//Hashed key
 	k = atoi( strncpy(tempKey, key, MAX_KEY_SIZE) );	//Trauncated key
 	strncpy(v, value, MAX_VALUE_SIZE);	//Trauncated valu
 
@@ -71,13 +71,13 @@ int kv_store_write(char *key, char *value){
 		(*table).podList[hashedKey].recordList[k/NUM_RECORDS].key = k;
 		//(*table).podList[hashedKey].recordList[k/NUM_RECORDS].value[available_location] = v;
 		(*table).podList[hashedKey].recordList[k/NUM_RECORDS].available_Location = ( available_location + 1) % MAX_NUM_VALUES;
-	}else if ( available_location = oldest_location && oldest_value == NULL ){		//There is nothing in this record
+	}else if ( available_location == oldest_location && oldest_value == NULL ){		//There is nothing in this record
 		//memcpy( (*table).podList[hashedKey].recordList[k/NUM_RECORDS].key, k, MAX_KEY_SIZE );
 		memcpy( (*table).podList[hashedKey].recordList[k/NUM_RECORDS].value[available_location], v, MAX_VALUE_SIZE );
 		(*table).podList[hashedKey].recordList[k/NUM_RECORDS].key = k;
 		//(*table).podList[hashedKey].recordList[k/NUM_RECORDS].value[available_location] = v;
 		(*table).podList[hashedKey].recordList[k/NUM_RECORDS].available_Location = ( available_location + 1) % MAX_NUM_VALUES;
-	}else if ( available_location = oldest_location && oldest_value != NULL ){		//We want to evict the value from the oldest location
+	}else if ( available_location == oldest_location && oldest_value != NULL ){		//We want to evict the value from the oldest location
 		//memcpy( (*table).podList[hashedKey].recordList[k/NUM_RECORDS].key, k, MAX_KEY_SIZE );
 		memcpy( (*table).podList[hashedKey].recordList[k/NUM_RECORDS].value[available_location], v, MAX_VALUE_SIZE );
 		(*table).podList[hashedKey].recordList[k/NUM_RECORDS].key = k;
@@ -110,7 +110,7 @@ char *kv_store_read(char *key){
 	}
 	//close(fd);
 
-	hashedKey = hash(key);	//Hashed key
+	hashedKey = hashFunction(key);	//Hashed key
 	k = atoi( strncpy(tempKey, key, MAX_KEY_SIZE) );	//Trauncated key 
 	oldest_location = (*table).podList[hashedKey].recordList[k/NUM_RECORDS].oldest_Location;
 	memcpy( v, (*table).podList[hashedKey].recordList[k/NUM_RECORDS].value[oldest_location], MAX_VALUE_SIZE );
@@ -138,7 +138,7 @@ char **kv_store_read_all(char *key){
 	}
 	//close(fd);
 
-	hashedKey = hash(key);	//Hashed key
+	hashedKey = hashFunction(key);	//Hashed key
 	k = atoi( strncpy(tempKey, key, MAX_KEY_SIZE) );	//Trauncated key
 	oldest_location = (*table).podList[hashedKey].recordList[k/NUM_RECORDS].oldest_Location;
 	v = (*table).podList[hashedKey].recordList[k/NUM_RECORDS].value;
@@ -148,6 +148,7 @@ char **kv_store_read_all(char *key){
 
 
 
-void main(){
+int main(){
 	printf("\nHello World\n\n");
+	return 0;
 }

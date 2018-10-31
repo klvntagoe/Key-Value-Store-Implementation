@@ -34,7 +34,7 @@ typedef struct KVStore{
 	Pod podList[NUM_PODS];	//List of pods
 }Store;
 
-int hash(char* key){
+int hashFunction(char* key){
 	return atoi(key) % NUM_PODS;
 }
 
