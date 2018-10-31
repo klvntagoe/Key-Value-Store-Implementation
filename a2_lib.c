@@ -1,28 +1,16 @@
 //clear; gcc -o store a2_lib.c -lrt; ./store
 #include "a2_lib.h"
 
-unsigned long generate_hash(unsigned char *str) {
-	int c = NUM_PODS;
-    #ifndef SDBM
-	unsigned long hash = MAGIC_HASH_NUMBER;
-	while (c = *str++)
-            hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-	
-	#else
-        unsigned long hash = 0;
-        while (c = *str++)
-            hash = c + (hash << 6) + (hash << 16) - hash;
-	#endif
-	return hash;
+unsigned long hash(unsigned char *str) {
+	return generate_hash(str) % NUM_PODS;
 }
-
 
 int kv_store_create(char* name){
 	int fd;
 	char* address;
 	
 	sharedMemoryObject = name;
-	fd = shm_open(name, O_EXCL | O_RDWR, 0);
+	fd = shm_open(sharedMemoryObject, O_CREAT, 0);
 	if (fd < 0) {
 		perror("Unable to create shared object\n");
 		exit(EXIT_FAILURE);
@@ -88,7 +76,7 @@ int kv_store_write(char *key, char *value){
 		exit(EXIT_FAILURE);
 	}
 
-	hashedKey = generate_hash(key);	//Hashed key
+	hashedKey = hash( (unsigned char *) key);	//Hashed key
 	strncpy(k, key, MAX_KEY_SIZE);	//Trauncated value
 	strncpy(v, value, MAX_VALUE_SIZE);	//Trauncated value
 
@@ -173,7 +161,7 @@ char *kv_store_read(char *key){
 		exit(EXIT_FAILURE);
 	}
 
-	hashedKey = generate_hash(key);	//Hashed key
+	hashedKey = hash( (unsigned char *) key);	//Hashed key
 	strncpy(k, key, MAX_KEY_SIZE);	//Trauncated value
 	//strncpy(v, value, MAX_VALUE_SIZE);	//Trauncated value
 
@@ -237,7 +225,7 @@ char **kv_store_read_all(char *key){
 		exit(EXIT_FAILURE);
 	}
 
-	hashedKey = generate_hash(key);	//Hashed key
+	hashedKey = hash( (unsigned char *) key);	//Hashed key
 	strncpy(k, key, MAX_KEY_SIZE);	//Trauncated value
 	//strncpy(v, value, MAX_VALUE_SIZE);	//Trauncated value
 
@@ -268,11 +256,4 @@ char **kv_store_read_all(char *key){
 	*/
 	
 	return v;
-}
-
-
-
-int main(){
-	printf("\nHello World\n\n");
-	return 0;
 }

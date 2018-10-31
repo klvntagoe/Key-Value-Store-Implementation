@@ -45,6 +45,7 @@ Store *table;	//Key-Value Store Structure global variable
 char* sharedMemoryObject;	//Shared memory object global variable
 
 
+unsigned long generate_hash(unsigned char *str);
 
 int kv_store_create(char* name);
 
