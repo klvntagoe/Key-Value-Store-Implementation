@@ -56,6 +56,17 @@ int kv_store_write(char *key, char *value){
 	}
 	int kv_store_size = ((MAX_KEY_SIZE + MAX_VALUE_SIZE) * NUM_RECORDS) + (32 * NUM_PODS);
 	address = mmap(NULL, kv_store_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	if ( strcmp(address, MAP_FAILED) != 0) {
+		perror("Unable to map key-value structure to shared object");
+		exit(EXIT_FAILURE);
+	}
+
+
+
+
+
+
+
 
 
 
@@ -64,6 +75,8 @@ int kv_store_write(char *key, char *value){
 	//RELEASE LOCK
 	return 0;
 }
+
+
 
 
 
@@ -82,15 +95,22 @@ char *kv_store_read(char *key){
 		perror("Unable to map key-value structure to shared object");
 		exit(EXIT_FAILURE);
 	}
-	//close(fd);
 
-	hashedKey = hash(key);	//Hashed key
-	k = atoi( strncpy(tempKey, key, MAX_KEY_SIZE) );	//Trauncated key 
-	oldest_location = (*table).podList[hashedKey].recordList[k/NUM_RECORDS].oldest_Location;
-	memcpy( v, (*table).podList[hashedKey].recordList[k/NUM_RECORDS].value[oldest_location], MAX_VALUE_SIZE );
-	
+
+
+
+
+
+
+
+
+
+	close(fd);
+	munmap(address, kv_store_size);
 	return v;
 }
+
+
 
 
 
@@ -110,18 +130,23 @@ char **kv_store_read_all(char *key){
 		perror("Unable to map key-value structure to shared object");
 		exit(EXIT_FAILURE);
 	}
-	//close(fd);
 
-	hashedKey = hash(key);	//Hashed key
-	k = atoi( strncpy(tempKey, key, MAX_KEY_SIZE) );	//Trauncated key
-	oldest_location = (*table).podList[hashedKey].recordList[k/NUM_RECORDS].oldest_Location;
-	v = (*table).podList[hashedKey].recordList[k/NUM_RECORDS].value;
 
+
+
+
+
+
+
+
+
+	close(fd);
+	munmap(address, kv_store_size);
 	return v;
 }
 
 
 
 void main(){
-	printf("\nHello World\n\n");
+
 }
