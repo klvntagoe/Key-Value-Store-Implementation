@@ -1,0 +1,117 @@
+/*TODO + Questions/Issues:
+- TRUANCATE KEYS
+- SWITCH WRITING ASSIGNMENTS TO MEMCPY FOR KEYS AND VALUES
+- Implement process handling with semaphores
+*/
+
+
+
+Notes for KV Store
+
+1.OVERVIEW
+- We want an implementation that does the following:
+	- Setup the store
+	- Write to the store
+	- Read from the store
+- shm_open()
+	- int shm_open(const char*name, int oflag, mode_t mode)
+	- Returns file descriptor on surccess or -1 on error
+	- Use shm_open() to open an object with the specified name (similar to open() for files)
+	- The name of the arguement identifies the shared mamory object to be created or opened
+	- Can include specific flag values and mode values to define the configuaratoin required from the shared memory object
+	- Flags are available in the assignment pdf
+- mmap()
+	- Use mmap() to map the shared memory object starting at an address
+	- By specifying a NULL value for the first arguement, we are letting the kernel pick the starting location for the shared memory object in the virtual address space
+	- Pass the file descriptor obtained from shm_open() to a mmap() that specifies the MAP_SHARED in the flags arguement
+- ftruncate()
+	- This call is used to resize the shared memory object to fit the stored objects
+	- As the last statement, we copy bytes into the share memory region
+- fstats()
+	- This is a system call that allows us to determine the length of the shared memory object
+	- Requires struct stats s;
+	- This length is used in the mmap() so that we can map only that portion into the virtual address space
+
+- We need to handle synchronization
+	- Need to ensure that our kvstore is reace free
+	- We enforce this by using named semaphores
+- Semphores:
+	- Once a semaphore is successfully created, two types of operations can be performed on them - wait() and post()
+	- The POSIX semaphore also provided additionaal APIs to obtain the current value and try waiting
+- sem_open()
+	- semt_t *sem_open(const char*name, intoflag, ..., mod_t mode)
+	- Returns a pointer to semaphore on success or SEM_FAILED on error
+- sem_wait()
+	- int sem_wait(sem_t *sem)
+	- Returns 0 on success or -1 on error
+	- It decriments the semaphore and if the value is >= 0 it returns immediately, otherwise it gets blocked
+	- The process is blocked until the value becomes greater than 0 and then the value is decrimented
+- sem_post()
+	- int sem_post(semt_t *sem)
+	- Returns 0 on sueccess or -1 on error
+	- The post() operation increments the semaphore value
+	- If a process is waiting on the semaphore, it will be woken and allowed to decrement the semaphore value
+	- If multiple processes are waiting on the semaphore, one process is arbitrarily woken up and allowed to decrement the semaphore value
+		- That is, only one process is let geo when a post() oepration happens among the waiting processes, however, the order in which the waiting processes are let go is undefined
+
+
+
+2. SUGGESTED INTERFACE
+- You can think of the key-value store as a persistent hash map. There are two distinguishing attributes
+	1. many reading and writing processes
+	2. large number or records that need to store to evict older unused records to make room for new entries
+- We could have multiple writes to the same key-value - that is duplicate writes
+- We want to save all duplicate values in the store - that is, there is no overwriting of values
+- The following API is suggested for your implementation
+	- int kv_store_create(char* name)
+		- creates a store if it is not yet created or opens the store if it is already created
+		- After successfull call to the function, the calling process should have access to the store
+		- This function could fail:
+			- If the system does not have enough memory to create another store
+			- Or the user does not have the proper permissions
+		- If the function fails return -1 else return 0
+		- This function could set a maximum size for the kev-value store:
+			- size is measured in terms of the number of key-value pairs in the store
+	- int kv_store_write(char *key, char * value)
+		- Takes a key-value pair and write them to the store
+		- The key and value strings can be length limited
+		- For instance:
+			- We can limit the key to 32 character and the value to 256 characters
+			- If a longer string is provided as input, you need to trauncate the strings to fit into teh maximum placeholders
+		- If the store is already full, the store nedds to evict an existing entry to make room for the new one
+		- in addition to storing the vey-value pair in memory, this function needs to update an index that is also maintained in the store so that the reads looking for any key-value pair can be completed as fast as possible
+	- char *kv_store_read(char *key)
+		- Takes a key and searches the store for the key-value pair
+		- If found, it returns a copy of the value
+		- It duplicates the string found in the store and returns a pointer to the string
+		- It is the resppnsibility of the calling function to free the memory allocated for teh string
+		- If no key-value pair is found, a NULL is returned
+	- char **kv_store_read_all(char *key)
+		- Takes a key and returns all the values in the store
+		- A NULL is returned if there is no record of the key
+
+
+
+3. SUGGESTED IMPLEMENTATION APPROACH
+- See Section 2.5.2 of the textbook - you can fit the algorithm provided there to achieve synchronization in your store
+	- In the R&W problem, readers can overlap with other readers, however, there cannot be any overlap with writers
+	- A writer needs mutually exclusive access to the database
+	- Also when a writer is updating the database, readers need to wait as well, otherwise readers would get invalid values
+- The simplest implementation would be just to store a key-value pair into the shared memory object
+	- You could create a record that holds the bytes of the key+value and just copy them into the shared mamory
+	- You keep track of the number of records in the store at any given time and just append to the end of the store and search all the store to find a record (not very efficient - at least for retrievals)
+- The approach suggested below is a godo compromise:
+	- Suppose a key-value store has size of n key-value pairs
+	- Split the store into k pods
+	- Each pod can hold n/k entries or records
+	- When a key-value pair s written, we hash the key to obtain the pod index
+	- We insert the key-value pair in the pod
+	- Depending on how good the hash functoin is in distributing entries amont the pods, we can have some pods overflowing before the others
+- Your design needs to handle duplicate keys
+	- With duplicate keys, we can have multiple records with the same key but different values, so they are distinct key-value pairs in the same pod
+	- When the read functoin is executed it should return one valye at at a time
+	- To read all values, you just keep calling the read function - it cycles through the available values
+	- So if there is only one record for a key, the same value is returned all the time
+- The key-valye store needs to use a FIFO (first-in-first-out) discipline to evic the records when mroe space is required
+	- That is, the record that is written the earliest is evicted when new records wre written and all available space is exhausted
+- Becasue the store is divided into pods, the space eviction could happen in a pod even though there is space in the store
