@@ -10,20 +10,21 @@ int kv_store_create(char* name){
 	char* address;
 	
 	sharedMemoryObject = name;
-	fd = shm_open(sharedMemoryObject, O_CREAT, 0);
+	table = malloc(sizeof(Store));
+	fd = shm_open(sharedMemoryObject, O_CREAT | O_RDWR, S_IRWXU);
 	if (fd < 0) {
-		perror("Unable to create shared object\n");
+		perror("Unable to opan shared object\n");
 		exit(EXIT_FAILURE);
 	}
 	
 	ftruncate(fd, sizeof(*table));
-	
-	address = mmap(&table, sizeof(table), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	if ( strcmp(address, MAP_FAILED) != 0) {
+
+	address = mmap(table, sizeof(Store), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	if ( address == (char *) -1) {
 		perror("Unable to map key-value structure to shared object");
 		exit(EXIT_FAILURE);
 	}
-	
+
 	for (int i = 0; i < NUM_PODS; i++) {
 		//(*table).podList[i].oldestRecord = 0;
 		for (int j = 0; j < NUM_RECORDS; j++){
@@ -71,7 +72,7 @@ int kv_store_write(char *key, char *value){
 	}
 	
 	address = mmap(&table, sizeof(table), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
-	if ( strcmp(address, MAP_FAILED) != 0) {
+	if ( address == (char *) -1) {
 		perror("Unable to map key-value structure to shared object");
 		exit(EXIT_FAILURE);
 	}
@@ -82,7 +83,7 @@ int kv_store_write(char *key, char *value){
 
 	newEntryFound = false;		//We want to find an empty index in our pod
 	keyEntryFound = false;		//We will use this to find the key's index in our pod
-	entryFound = 0;				//Earliest available location in a pod
+	entryFound = -1;				//Earliest available location in a pod
 	for (int i = 0; i < NUM_RECORDS_PER_POD && (!newEntryFound || !keyEntryFound); i++){
 		if ( (*table).podList[hashedKey].recordList[i].key == NULL ){ //CHANGE THIS CHANGE THIS CHANGE THIS CHANGE THIS CHANGE THIS
 			newEntryFound = true;
@@ -91,6 +92,10 @@ int kv_store_write(char *key, char *value){
 			keyEntryFound = true;
 			entryFound = i;
 		}
+	}
+	if (entryFound == -1){
+		perror("Unable to write to key-value store\n");
+		exit(EXIT_FAILURE);
 	}
 
 	if (newEntryFound == true && keyEntryFound == false){
@@ -128,7 +133,6 @@ int kv_store_write(char *key, char *value){
 	RELEASE WRITE_LOCK
 	*/
 	
-	
 	return 0;
 }
 
@@ -155,23 +159,32 @@ char *kv_store_read(char *key){
 		exit(EXIT_FAILURE);
 	}
 
+
 	address = mmap(&table, sizeof(table), PROT_READ, MAP_SHARED, fd, 0);
-	if ( strcmp(address, MAP_FAILED) != 0) {
+	if ( address == (char *) -1) {
 		perror("Unable to map key-value structure to shared object");
 		exit(EXIT_FAILURE);
 	}
+
 
 	hashedKey = hash( (unsigned char *) key);	//Hashed key
 	strncpy(k, key, MAX_KEY_SIZE);	//Trauncated value
 	//strncpy(v, value, MAX_VALUE_SIZE);	//Trauncated value
 
 	keyEntryFound = false;		//We will use this to find the key's index in our pod
-	entryFound = 0;				//Earliest available location in a pod
+	entryFound = -1;				//Earliest available location in a pod
 	for (int i = 0; i < NUM_RECORDS_PER_POD && !keyEntryFound; i++){
+		printf("%s\n",(*table).podList[hashedKey].recordList[i].key );
+		printf("%s\n",k );
+		printf("Debug Test\n");
 		if ( strcmp((*table).podList[hashedKey].recordList[i].key, k) == 0 ){ 
 			keyEntryFound = true;
 			entryFound = i;
 		}
+	}
+	if (entryFound == -1){
+		perror("Unable to write to key-value store\n");
+		exit(EXIT_FAILURE);
 	}
 
 	head = (*table).podList[hashedKey].recordList[entryFound].oldest_Location;
@@ -220,7 +233,7 @@ char **kv_store_read_all(char *key){
 	}
 
 	address = mmap(&table, sizeof(table), PROT_READ, MAP_SHARED, fd, 0);
-	if ( strcmp(address, MAP_FAILED) != 0) {
+	if ( address == (char *) -1) {
 		perror("Unable to map key-value structure to shared object");
 		exit(EXIT_FAILURE);
 	}
@@ -230,12 +243,16 @@ char **kv_store_read_all(char *key){
 	//strncpy(v, value, MAX_VALUE_SIZE);	//Trauncated value
 
 	keyEntryFound = false;		//We will use this to find the key's index in our pod
-	entryFound = 0;				//Earliest available location in a pod
+	entryFound = -1;				//Earliest available location in a pod
 	for (int i = 0; i < NUM_RECORDS_PER_POD && !keyEntryFound; i++){
 		if ( strcmp((*table).podList[hashedKey].recordList[i].key, k) == 0 ){ 
 			keyEntryFound = true;
 			entryFound = i;
 		}
+	}
+	if (entryFound == -1){
+		perror("Unable to write to key-value store\n");
+		exit(EXIT_FAILURE);
 	}
 
 	oldest_value = (*table).podList[hashedKey].recordList[entryFound].value;
