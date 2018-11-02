@@ -11,9 +11,9 @@ int kv_store_create(char* name){
 	
 	sharedMemoryObject = name;
 	table = malloc(sizeof(Store));
-	fd = shm_open(sharedMemoryObject, O_CREAT | O_RDWR, S_IRWXU);
+	fd = shm_open(sharedMemoryObject, O_CREAT | O_RDWR, 0);
 	if (fd < 0) {
-		perror("Unable to opan shared object\n");
+		perror("Unable to open shared object\n");
 		exit(EXIT_FAILURE);
 	}
 	
@@ -37,6 +37,7 @@ int kv_store_create(char* name){
 	close(fd);
 	munmap(address, sizeof(*table));
 
+	/*
 	sem_t *w_lock = sem_open(WRITER_SEM_NAME, O_CREAT, 0644, 1);
 	if (w_lock == SEM_FAILED){
 		perror("Unable to create semaphore");
@@ -48,6 +49,7 @@ int kv_store_create(char* name){
 		perror("Unable to create semaphore");
 		exit(EXIT_FAILURE);
 	}
+	*/
 
 	return 0; 
 }
@@ -60,9 +62,9 @@ int kv_store_write(char *key, char *value){
 	bool newEntryFound, keyEntryFound;
 
 
-	/*
-	OBTAIN WRITE_LOCK
-	*/
+	//OBTAIN WRITE_LOCK
+	
+
 
 	
 	fd = shm_open(sharedMemoryObject, O_RDWR, 0);
