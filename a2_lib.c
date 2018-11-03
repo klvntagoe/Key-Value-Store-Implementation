@@ -37,7 +37,7 @@ int kv_store_create(char* name){
 	}
 
 	close(fd);
-	munmap(address, SIZE_OF_STORE);
+	munmap(table, SIZE_OF_STORE);
 
 	/*
 	sem_t *w_lock = sem_open(WRITER_SEM_NAME, O_CREAT, 0644, 1);
@@ -66,8 +66,6 @@ int kv_store_write(char *key, char *value){
 
 	//OBTAIN WRITE_LOCK
 	
-
-
 	
 	fd = shm_open(sharedMemoryObject, O_RDWR, 0);
 	if (fd < 0) {
@@ -83,12 +81,11 @@ int kv_store_write(char *key, char *value){
 	}
 
 	hashedKey = hash( (unsigned char *) key);	//Hashed key
-	//k[MAX_KEY_SIZE];
-	//v[MAX_VALUE_SIZE];
-	memset(k, '\0', MAX_KEY_SIZE);
-	memset(v, '\0', MAX_VALUE_SIZE);
+	//memset(k, '\0', MAX_KEY_SIZE);
+	//memset(v, '\0', MAX_VALUE_SIZE);
 	strncpy(k, key, MAX_KEY_SIZE);	//Trauncated value
 	strncpy(v, value, MAX_VALUE_SIZE);	//Trauncated value
+	//v = value;
 
 	newEntryFound = false;		//We want to find an empty index in our pod
 	keyEntryFound = false;		//We will use this to find the key's index in our pod
@@ -137,7 +134,8 @@ int kv_store_write(char *key, char *value){
 
 
 	close(fd);
-	munmap(address, SIZE_OF_STORE);
+	munmap(table, SIZE_OF_STORE);
+
 	/*
 	RELEASE WRITE_LOCK
 	*/
@@ -201,7 +199,8 @@ char *kv_store_read(char *key){
 
 
 	close(fd);
-	munmap(address, SIZE_OF_STORE);
+	munmap(table, SIZE_OF_STORE);
+
 	/*
 	OBTAIN READ_LOCK
 	*/
@@ -269,11 +268,11 @@ char **kv_store_read_all(char *key){
 
 
 	close(fd);
-	munmap(address, SIZE_OF_STORE);
+	munmap(table, SIZE_OF_STORE);
+
 	/*
 	OBTAIN READ_LOCK
 	*/
-
 
 	/*
 	DECREMENT READER COUNT
