@@ -10,44 +10,46 @@ int kv_store_create(char* name){
 	char* address;
 	
 	sharedMemoryObject = name;
-	table = malloc(sizeof(Store));
-	fd = shm_open(sharedMemoryObject, O_CREAT | O_RDWR, 0);
+	//table = malloc(SIZE_OF_STORE);
+	fd = shm_open(sharedMemoryObject, O_CREAT | O_RDWR, S_IRWXU);
 	if (fd < 0) {
 		perror("Unable to open shared object\n");
-		exit(EXIT_FAILURE);
+		return -1;
 	}
 	
-	ftruncate(fd, sizeof(*table));
+	ftruncate(fd, SIZE_OF_STORE);
 
-	address = mmap(table, sizeof(Store), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	address = mmap(0, SIZE_OF_STORE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	memset(address, '\0', SIZE_OF_STORE);
+	table = (Store*) address;
 	if ( address == (char *) -1) {
 		perror("Unable to map key-value structure to shared object");
-		exit(EXIT_FAILURE);
+		return -1;
 	}
 
 	for (int i = 0; i < NUM_PODS; i++) {
 		//(*table).podList[i].oldestRecord = 0;
-		for (int j = 0; j < NUM_RECORDS; j++){
+		for (int j = 0; j < NUM_RECORDS_PER_POD; j++){
 			(*table).podList[i].recordList[j].oldest_Location = 0;
 			(*table).podList[i].recordList[j].available_Location = 0;
-			(*table).podList[i].recordList[j].key = NULL;
+			//(*table).podList[i].recordList[j].key = NULL;
 		}
 	}
 
 	close(fd);
-	munmap(address, sizeof(*table));
+	munmap(address, SIZE_OF_STORE);
 
 	/*
 	sem_t *w_lock = sem_open(WRITER_SEM_NAME, O_CREAT, 0644, 1);
 	if (w_lock == SEM_FAILED){
 		perror("Unable to create semaphore");
-		exit(EXIT_FAILURE);
+		return -1;
 	}
 
 	sem_t *r_lock = sem_open(READER_SEM_NAME, O_CREAT, 0644, 1);
 	if (r_lock == SEM_FAILED){
 		perror("Unable to create semaphore");
-		exit(EXIT_FAILURE);
+		return -1;
 	}
 	*/
 
@@ -69,17 +71,22 @@ int kv_store_write(char *key, char *value){
 	
 	fd = shm_open(sharedMemoryObject, O_RDWR, 0);
 	if (fd < 0) {
-		perror("Unable to create shared object\n");
-		exit(EXIT_FAILURE);
+		perror("Unable to open shared object for writing process\n");
+		return -1;
 	}
 	
-	address = mmap(&table, sizeof(table), PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	address = mmap(&table, SIZE_OF_STORE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
+	table = (Store*) address;
 	if ( address == (char *) -1) {
 		perror("Unable to map key-value structure to shared object");
-		exit(EXIT_FAILURE);
+		return -1;
 	}
 
 	hashedKey = hash( (unsigned char *) key);	//Hashed key
+	//k[MAX_KEY_SIZE];
+	//v[MAX_VALUE_SIZE];
+	memset(k, '\0', MAX_KEY_SIZE);
+	memset(v, '\0', MAX_VALUE_SIZE);
 	strncpy(k, key, MAX_KEY_SIZE);	//Trauncated value
 	strncpy(v, value, MAX_VALUE_SIZE);	//Trauncated value
 
@@ -97,7 +104,7 @@ int kv_store_write(char *key, char *value){
 	}
 	if (entryFound == -1){
 		perror("Unable to write to key-value store\n");
-		exit(EXIT_FAILURE);
+		return -1;
 	}
 
 	if (newEntryFound == true && keyEntryFound == false){
@@ -125,12 +132,12 @@ int kv_store_write(char *key, char *value){
 		}
 	}else{
 		perror("Unable to write to key-value store\n");
-		exit(EXIT_FAILURE);
+		return -1;
 	}
 
 
 	close(fd);
-	munmap(address, sizeof(*table));
+	munmap(address, SIZE_OF_STORE);
 	/*
 	RELEASE WRITE_LOCK
 	*/
@@ -157,15 +164,16 @@ char *kv_store_read(char *key){
 
 	fd = shm_open(sharedMemoryObject, O_RDONLY, 0);
 	if (fd < 0) {
-		perror("Unable to create shared object\n");
-		exit(EXIT_FAILURE);
+		perror("Unable to open shared object for reading process\n");
+		return NULL;
 	}
 
 
-	address = mmap(&table, sizeof(table), PROT_READ, MAP_SHARED, fd, 0);
+	address = mmap(0, SIZE_OF_STORE, PROT_READ, MAP_SHARED, fd, 0);
+	table = (Store*) address;
 	if ( address == (char *) -1) {
 		perror("Unable to map key-value structure to shared object");
-		exit(EXIT_FAILURE);
+		return NULL;
 	}
 
 
@@ -176,17 +184,15 @@ char *kv_store_read(char *key){
 	keyEntryFound = false;		//We will use this to find the key's index in our pod
 	entryFound = -1;				//Earliest available location in a pod
 	for (int i = 0; i < NUM_RECORDS_PER_POD && !keyEntryFound; i++){
-		printf("%s\n",(*table).podList[hashedKey].recordList[i].key );
-		printf("%s\n",k );
-		printf("Debug Test\n");
+		//printf("Debug Test\n");
 		if ( strcmp((*table).podList[hashedKey].recordList[i].key, k) == 0 ){ 
 			keyEntryFound = true;
 			entryFound = i;
 		}
 	}
 	if (entryFound == -1){
-		perror("Unable to write to key-value store\n");
-		exit(EXIT_FAILURE);
+		perror("Unable to read from to key-value store\n");
+		return NULL;
 	}
 
 	head = (*table).podList[hashedKey].recordList[entryFound].oldest_Location;
@@ -195,7 +201,7 @@ char *kv_store_read(char *key){
 
 
 	close(fd);
-	munmap(address, sizeof(*table));
+	munmap(address, SIZE_OF_STORE);
 	/*
 	OBTAIN READ_LOCK
 	*/
@@ -230,14 +236,15 @@ char **kv_store_read_all(char *key){
 
 	fd = shm_open(sharedMemoryObject, O_RDONLY, 0);
 	if (fd < 0) {
-		perror("Unable to create shared object\n");
-		exit(EXIT_FAILURE);
+		perror("Unable to open shared object for reading process\n");
+		return NULL;
 	}
 
-	address = mmap(&table, sizeof(table), PROT_READ, MAP_SHARED, fd, 0);
+	address = mmap(0, SIZE_OF_STORE, PROT_READ, MAP_SHARED, fd, 0);
+	table = (Store*) address;
 	if ( address == (char *) -1) {
 		perror("Unable to map key-value structure to shared object");
-		exit(EXIT_FAILURE);
+		return NULL;
 	}
 
 	hashedKey = hash( (unsigned char *) key);	//Hashed key
@@ -253,8 +260,8 @@ char **kv_store_read_all(char *key){
 		}
 	}
 	if (entryFound == -1){
-		perror("Unable to write to key-value store\n");
-		exit(EXIT_FAILURE);
+		perror("Unable to read from to key-value store\n");
+		return NULL;
 	}
 
 	oldest_value = (*table).podList[hashedKey].recordList[entryFound].value;
@@ -262,7 +269,7 @@ char **kv_store_read_all(char *key){
 
 
 	close(fd);
-	munmap(address, sizeof(*table));
+	munmap(address, SIZE_OF_STORE);
 	/*
 	OBTAIN READ_LOCK
 	*/
