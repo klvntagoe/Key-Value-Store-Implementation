@@ -281,7 +281,7 @@ int main(){
     }
 
     printf("-----------Testing FIFO/Read Order/Read Alls -----------\n");
-    for(int i = 0; i < __TEST_MAX_KEY__; i++){
+    for(int i = 0; i < 5; i++){
         get_patterns(expected_result, i, patterns, &pattern_length, &errors);
         read_order_test(expected_result, i, patterns, pattern_length, &errors);
         read_all_test(keys_buf, data_buf, expected_result, i, patterns, pattern_length, &errors);
