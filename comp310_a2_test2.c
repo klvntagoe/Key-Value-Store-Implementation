@@ -4,6 +4,12 @@
 
 #include "comp310_a2_test.h"
 
+void kv_delete_db() {
+    //kill_shared_mem();
+    shm_unlink("writer_lock_ktagoe");
+    shm_unlink("reader_lock_ktagoe");
+}
+
 void kill_shared_mem(){
     //In case it already exists
     sem_unlink(__TEST_SHARED_SEM_NAME__);
