@@ -14,7 +14,6 @@ int kv_store_create(char* name){
 	Store* table;
 	
 	sharedMemoryObject = name;
-	//table = malloc(SIZE_OF_STORE);
 	fd = shm_open(sharedMemoryObject, O_CREAT | O_RDWR, S_IRWXU);
 	if (fd < 0) {
 		perror("Unable to open shared object\n");
@@ -33,7 +32,6 @@ int kv_store_create(char* name){
 
 	(*table).num_readers = 0;
 	for (int i = 0; i < NUM_PODS; i++) {
-		//(*table).podList[i].oldestRecord = 0;
 		for (int j = 0; j < NUM_RECORDS_PER_POD; j++){
 			(*table).podList[i].recordList[j].oldest_Location = 0;
 			(*table).podList[i].recordList[j].available_Location = 0;
@@ -62,20 +60,25 @@ int kv_store_create(char* name){
 
 
 int kv_store_write(char *key, char *value){
-	int fd, hashedKey, entryFound, head, tail;
+	//KV- Store Variables
+	int fd, hashedKey, entryFound, head, tail, rIndex;
 	Store * table;
 	char *oldest_value;
 	bool newEntryFound, keyEntryFound;
 
+	//Semaphore Variables
+	sem_t *write_lock;
+	int lock, unlock;
+
 
 	//OBTAIN WRITE_LOCK
-	sem_t *write_lock = sem_open(WRITER_SEM_NAME, O_CREAT);
+	write_lock = sem_open(WRITER_SEM_NAME, O_CREAT);
 	if (write_lock == SEM_FAILED){
 		perror("Unable to open the write semaphore");
 		return -1;
 	}
 
-	int lock = sem_wait(write_lock);
+	lock = sem_wait(write_lock);
 	if (lock == -1){
 		perror("Unable to lock the write semaphore");
 		return -1;
@@ -124,7 +127,6 @@ int kv_store_write(char *key, char *value){
 		//OUR KEY IS PRESENT IN OUR POD
 		tail = (*table).podList[hashedKey].recordList[entryFound].available_Location;
 		head = (*table).podList[hashedKey].recordList[entryFound].oldest_Location;
-		//memcpy( oldest_value, (*table).podList[hashedKey].recordList[entryFound].value[head], MAX_VALUE_SIZE );
 		oldest_value = (*table).podList[hashedKey].recordList[entryFound].value[head];
 
 		if ( head != tail ){	//THE LOCATION OF THE OLDEST VALUE AND NEXT AVAILABLE LOCATOIN ARE DIFFERENT
@@ -140,7 +142,7 @@ int kv_store_write(char *key, char *value){
 				memcpy( (*table).podList[hashedKey].recordList[entryFound].value[tail], value, MAX_VALUE_SIZE );
 				(*table).podList[hashedKey].recordList[entryFound].oldest_Location = ( head + 1) % MAX_NUM_VALUES_PER_KEY;
 				(*table).podList[hashedKey].recordList[entryFound].available_Location = ( tail + 1) % MAX_NUM_VALUES_PER_KEY;
-				int rIndex = (*table).podList[hashedKey].recordList[entryFound].read_Index;
+				rIndex = (*table).podList[hashedKey].recordList[entryFound].read_Index;
 				if (head == rIndex) (*table).podList[hashedKey].recordList[entryFound].read_Index = (rIndex + 1) % MAX_NUM_VALUES_PER_KEY;
 			}
 		}
@@ -156,7 +158,7 @@ int kv_store_write(char *key, char *value){
 
 
 	//RELEASE WRITE_LOCK
-	int unlock = sem_post(write_lock);
+	unlock = sem_post(write_lock);
 	if (unlock == -1){
 		perror("Unable to unlock the write semaphore");
 		return -1;
@@ -168,32 +170,33 @@ int kv_store_write(char *key, char *value){
 
 
 char *kv_store_read(char *key){
+	//KV- Store Variables
+	int	fd, hashedKey, head, entryFound, numReaders;
+	Store * table;
+	char *value;
+	bool keyEntryFound;
+
+	//Semaphore Variables
+	sem_t *read_lock1, *write_lock1, *read_lock2, *write_lock2;
+	int rLock1, wLock1, rUnlock1, rLock2, wLock2, rUnlock2;
 
 	//OBTAIN READ_LOCK
-	sem_t *read_lock1 = sem_open(READER_SEM_NAME, O_CREAT);
+	read_lock1 = sem_open(READER_SEM_NAME, O_CREAT);
 	if (read_lock1 == SEM_FAILED){
 		perror("Unable to open the read semaphore");
 		return NULL;
 	}
-
-	int rlock1 = sem_wait(read_lock1);
-	if (rlock1 == -1){
+	rLock1 = sem_wait(read_lock1);
+	if (rLock1 == -1){
 		perror("Unable to lock the read semaphore");
 		return NULL;
 	}
-
-	
-	int	fd, hashedKey, head, entryFound;
-	Store * table;
-	char *value;
-	bool keyEntryFound;
 
 	fd = shm_open(sharedMemoryObject, O_RDWR, 0);
 	if (fd < 0) {
 		perror("Unable to open shared object for reading process\n");
 		return NULL;
 	}
-
 
 	table = (Store *) mmap(0, SIZE_OF_STORE, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if ( (char *) table == (char *) -1) {
@@ -203,19 +206,20 @@ char *kv_store_read(char *key){
 	}
 
 	//INCREMENT READER COUNT
-	(*table).num_readers++;
+	numReaders = (*table).num_readers;
+	(*table).num_readers = numReaders + 1;
 
 	//OBTAIN WRITE_LOCK
 	if ((*table).num_readers == 1){
-		sem_t *write_lock1 = sem_open(WRITER_SEM_NAME, O_CREAT);
+		write_lock1 = sem_open(WRITER_SEM_NAME, O_CREAT);
 		if (write_lock1 == SEM_FAILED){
 			perror("Unable to open the write semaphore");
 			close(fd);
 			munmap(table, SIZE_OF_STORE);
 			return NULL;
 		}
-		int wlock1 = sem_wait(write_lock1);
-		if (wlock1 == -1){
+		wLock1 = sem_wait(write_lock1);
+		if (wLock1 == -1){
 			perror("Unable to lock the write semaphore");
 			close(fd);
 			munmap(table, SIZE_OF_STORE);
@@ -224,8 +228,8 @@ char *kv_store_read(char *key){
 	}
 
 	//RELEASE READ_LOCK
-	int unlock1 = sem_post(read_lock1);
-	if (unlock1 == -1){
+	rUnlock1 = sem_post(read_lock1);
+	if (rUnlock1 == -1){
 		perror("Unable to unlock the read semaphore");
 		close(fd);
 		munmap(table, SIZE_OF_STORE);
@@ -258,14 +262,13 @@ char *kv_store_read(char *key){
 
 
 	//OBTAIN READ_LOCK
-	sem_t *read_lock2 = sem_open(READER_SEM_NAME, O_CREAT);
+	read_lock2 = sem_open(READER_SEM_NAME, O_CREAT);
 	if (read_lock2 == SEM_FAILED){
 		perror("Unable to open the read semaphore");
 		return NULL;
 	}
-
-	int rlock2 = sem_wait(read_lock2);
-	if (rlock2 == -1){
+	rLock2 = sem_wait(read_lock2);
+	if (rLock2 == -1){
 		perror("Unable to lock the read semaphore");
 		close(fd);
 		munmap(table, SIZE_OF_STORE);
@@ -273,19 +276,20 @@ char *kv_store_read(char *key){
 	}
 
 	//DECREMENT READER COUNT
-	(*table).num_readers--;
+	numReaders = (*table).num_readers;
+	(*table).num_readers = numReaders - 1;
 
 	//OBTAIN WRITE_LOCK
 	if ((*table).num_readers == 1){
-		sem_t *write_lock2 = sem_open(WRITER_SEM_NAME, O_CREAT);
+		write_lock2 = sem_open(WRITER_SEM_NAME, O_CREAT);
 		if (write_lock2 == SEM_FAILED){
 			perror("Unable to open the write semaphore");
 			close(fd);
 			munmap(table, SIZE_OF_STORE);
 			return NULL;
 		}
-		int wlock2 = sem_wait(write_lock2);
-		if (wlock2 == -1){
+		wLock2 = sem_wait(write_lock2);
+		if (wLock2 == -1){
 			perror("Unable to lock the write semaphore");
 			close(fd);
 			munmap(table, SIZE_OF_STORE);
@@ -294,8 +298,8 @@ char *kv_store_read(char *key){
 	}
 
 	//RELEASE READ_LOCK
-	int unlock2 = sem_post(read_lock2);
-	if (unlock2 == -1){
+	rUnlock2 = sem_post(read_lock2);
+	if (rUnlock2 == -1){
 		perror("Unable to unlock the read semaphore");
 		close(fd);
 		munmap(table, SIZE_OF_STORE);
@@ -309,19 +313,27 @@ char *kv_store_read(char *key){
 
 char **kv_store_read_all(char *key){
 
-
-	/*
-	OBTAIN READ_LOCK
-	INCREMENT READER COUNT
-	IF (READER COUNT == 1) then OBTAIN WRITE_LOCK
-	OBTAIN READ_LOCK
-	*/
-	
-
-	int	fd, hashedKey, entryFound;
-	Store *table;
+	//KV- Store Variables
+	int	fd, hashedKey, entryFound, numReaders;
+	Store * table;
 	char **values;
 	bool keyEntryFound;
+
+	//Semaphore Variables
+	sem_t *read_lock1, *write_lock1, *read_lock2, *write_lock2;
+	int rLock1, wLock1, rUnlock1, rLock2, wLock2, rUnlock2;
+
+	//OBTAIN READ_LOCK
+	read_lock1 = sem_open(READER_SEM_NAME, O_CREAT);
+	if (read_lock1 == SEM_FAILED){
+		perror("Unable to open the read semaphore");
+		return NULL;
+	}
+	rLock1 = sem_wait(read_lock1);
+	if (rLock1 == -1){
+		perror("Unable to lock the read semaphore");
+		return NULL;
+	}
 
 	fd = shm_open(sharedMemoryObject, O_RDONLY, 0);
 	if (fd < 0) {
@@ -333,6 +345,37 @@ char **kv_store_read_all(char *key){
 	if ( (char *) table == (char *) -1) {
 		perror("Unable to map key-value structure to shared object");
 		close(fd);
+		return NULL;
+	}
+
+	//INCREMENT READER COUNT
+	numReaders = (*table).num_readers;
+	(*table).num_readers = numReaders + 1;
+
+	//OBTAIN WRITE_LOCK
+	if ((*table).num_readers == 1){
+		write_lock1 = sem_open(WRITER_SEM_NAME, O_CREAT);
+		if (write_lock1 == SEM_FAILED){
+			perror("Unable to open the write semaphore");
+			close(fd);
+			munmap(table, SIZE_OF_STORE);
+			return NULL;
+		}
+		wLock1 = sem_wait(write_lock1);
+		if (wLock1 == -1){
+			perror("Unable to lock the write semaphore");
+			close(fd);
+			munmap(table, SIZE_OF_STORE);
+			return NULL;
+		}
+	}
+
+	//RELEASE READ_LOCK
+	rUnlock1 = sem_post(read_lock1);
+	if (rUnlock1 == -1){
+		perror("Unable to unlock the read semaphore");
+		close(fd);
+		munmap(table, SIZE_OF_STORE);
 		return NULL;
 	}
 
@@ -367,15 +410,50 @@ char **kv_store_read_all(char *key){
 	close(fd);
 	munmap(table, SIZE_OF_STORE);
 
-	/*
-	OBTAIN READ_LOCK
-	*/
+	//OBTAIN READ_LOCK
+	read_lock2 = sem_open(READER_SEM_NAME, O_CREAT);
+	if (read_lock2 == SEM_FAILED){
+		perror("Unable to open the read semaphore");
+		return NULL;
+	}
+	rLock2 = sem_wait(read_lock2);
+	if (rLock2 == -1){
+		perror("Unable to lock the read semaphore");
+		close(fd);
+		munmap(table, SIZE_OF_STORE);
+		return NULL;
+	}
 
-	/*
-	DECREMENT READER COUNT
-	if (READER COUNT == 0) then RELEASE WRITE_LOCK
-	RELEASE READ_LOCK
-	*/
+	//DECREMENT READER COUNT
+	numReaders = (*table).num_readers;
+	(*table).num_readers = numReaders - 1;
+
+	//OBTAIN WRITE_LOCK
+	if ((*table).num_readers == 1){
+		write_lock2 = sem_open(WRITER_SEM_NAME, O_CREAT);
+		if (write_lock2 == SEM_FAILED){
+			perror("Unable to open the write semaphore");
+			close(fd);
+			munmap(table, SIZE_OF_STORE);
+			return NULL;
+		}
+		wLock2 = sem_wait(write_lock2);
+		if (wLock2 == -1){
+			perror("Unable to lock the write semaphore");
+			close(fd);
+			munmap(table, SIZE_OF_STORE);
+			return NULL;
+		}
+	}
+
+	//RELEASE READ_LOCK
+	rUnlock2 = sem_post(read_lock2);
+	if (rUnlock2 == -1){
+		perror("Unable to unlock the read semaphore");
+		close(fd);
+		munmap(table, SIZE_OF_STORE);
+		return NULL;
+	}
 	
 	return values;
 }
