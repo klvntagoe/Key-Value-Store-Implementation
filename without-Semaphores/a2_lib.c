@@ -1,4 +1,4 @@
-//rm -r /dev/shm/writer_lock_ktagoe; rm -r /dev/shm/reader_lock_ktagoe; clear; make test1; gdb os_test1
+//rm os_test1; rm -r /dev/shm/writer_lock_ktagoe; rm -r /dev/shm/reader_lock_ktagoe; clear; make test1; gdb os_test1
 
 #include "a2_lib.h"
 
