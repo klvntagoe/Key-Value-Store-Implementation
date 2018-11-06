@@ -95,6 +95,7 @@ int main(){
                     printf("Error! Write failed\n");
                 }
             }
+            //printf("child %d wrote %d/%d\n", child_num, write_table[child_num], write_count);
             sem_close(open_sem_lock);
             exit(0);
         }

@@ -25,7 +25,7 @@
 #define __TEST_SHARED_MEM_NAME__ "/GTX_1080_TI-kelvintagoe"
 #define __TEST_SHARED_SEM_NAME__ "/ONLY_TEARS-kelvintagoe"
 #define __TEST_FORK_NUM__ 4
-#define RUN_ITERATIONS 20
+#define RUN_ITERATIONS 200
 
 sem_t *open_sem_lock;
 pid_t pids[__TEST_FORK_NUM__];
