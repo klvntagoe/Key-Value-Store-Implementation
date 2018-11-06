@@ -6,8 +6,9 @@
 
 void kv_delete_db() {
     //kill_shared_mem();
-    shm_unlink("writer_lock_ktagoe");
-    shm_unlink("reader_lock_ktagoe");
+    sem_unlink("writer_lock_ktagoe");
+    sem_unlink("reader_lock_ktagoe");
+    shm_unlink(__TEST_SHARED_MEM_NAME__);
 }
 
 void kill_shared_mem(){

@@ -37,7 +37,7 @@ typedef struct KVPod{
 }Pod;
 
 typedef struct KVStore{
-	int num_readers;
+	int num_Readers;
 	Pod podList[NUM_PODS];	//List of pods
 }Store;
 

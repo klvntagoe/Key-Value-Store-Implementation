@@ -30,7 +30,7 @@ int kv_store_create(char* name){
 		return -1;
 	}
 
-	(*table).num_readers = 0;
+	(*table).num_Readers = 0;
 	for (int i = 0; i < NUM_PODS; i++) {
 		for (int j = 0; j < NUM_RECORDS_PER_POD; j++){
 			(*table).podList[i].recordList[j].oldest_Location = 0;
@@ -42,13 +42,13 @@ int kv_store_create(char* name){
 	close(fd);
 	munmap(table, SIZE_OF_STORE);
 
-	sem_t *write_lock = sem_open(WRITER_SEM_NAME, O_CREAT, 0644, 1);
+	sem_t *write_lock = sem_open(WRITER_SEM_NAME, O_CREAT, 0666, 1);
 	if (write_lock == SEM_FAILED){
 		perror("Unable to create semaphore");
 		return -1;
 	}
 
-	sem_t *read_lock = sem_open(READER_SEM_NAME, O_CREAT, 0644, 1);
+	sem_t *read_lock = sem_open(READER_SEM_NAME, O_CREAT, 0666, 1);
 	if (read_lock == SEM_FAILED){
 		perror("Unable to create semaphore");
 		return -1;
@@ -163,6 +163,12 @@ int kv_store_write(char *key, char *value){
 		perror("Unable to unlock the write semaphore");
 		return -1;
 	}
+
+	int close = sem_close(write_lock);
+	if (close == -1){
+		perror("Unable to close the write semaphore");
+		return -1;
+	}
 	
 	return 0;
 }
@@ -177,16 +183,16 @@ char *kv_store_read(char *key){
 	bool keyEntryFound;
 
 	//Semaphore Variables
-	sem_t *read_lock1, *write_lock1, *read_lock2, *write_lock2;
-	int rLock1, wLock1, rUnlock1, rLock2, wLock2, rUnlock2;
+	sem_t *read_lock, *write_lock;
+	int rLock1, rLock2, rUnlock1, rUnlock2, wLock, wUnlock;
 
 	//OBTAIN READ_LOCK
-	read_lock1 = sem_open(READER_SEM_NAME, O_CREAT);
-	if (read_lock1 == SEM_FAILED){
+	read_lock = sem_open(READER_SEM_NAME, O_CREAT);
+	if (read_lock == SEM_FAILED){
 		perror("Unable to open the read semaphore");
 		return NULL;
 	}
-	rLock1 = sem_wait(read_lock1);
+	rLock1 = sem_wait(read_lock);
 	if (rLock1 == -1){
 		perror("Unable to lock the read semaphore");
 		return NULL;
@@ -206,20 +212,20 @@ char *kv_store_read(char *key){
 	}
 
 	//INCREMENT READER COUNT
-	numReaders = (*table).num_readers;
-	(*table).num_readers = numReaders + 1;
+	numReaders = (*table).num_Readers;
+	(*table).num_Readers = numReaders + 1;
 
 	//OBTAIN WRITE_LOCK
-	if ((*table).num_readers == 1){
-		write_lock1 = sem_open(WRITER_SEM_NAME, O_CREAT);
-		if (write_lock1 == SEM_FAILED){
+	if ((*table).num_Readers == 1){
+		write_lock = sem_open(WRITER_SEM_NAME, O_CREAT);
+		if (write_lock == SEM_FAILED){
 			perror("Unable to open the write semaphore");
 			close(fd);
 			munmap(table, SIZE_OF_STORE);
 			return NULL;
 		}
-		wLock1 = sem_wait(write_lock1);
-		if (wLock1 == -1){
+		wLock = sem_wait(write_lock);
+		if (wLock == -1){
 			perror("Unable to lock the write semaphore");
 			close(fd);
 			munmap(table, SIZE_OF_STORE);
@@ -228,7 +234,7 @@ char *kv_store_read(char *key){
 	}
 
 	//RELEASE READ_LOCK
-	rUnlock1 = sem_post(read_lock1);
+	rUnlock1 = sem_post(read_lock);
 	if (rUnlock1 == -1){
 		perror("Unable to unlock the read semaphore");
 		close(fd);
@@ -262,12 +268,12 @@ char *kv_store_read(char *key){
 
 
 	//OBTAIN READ_LOCK
-	read_lock2 = sem_open(READER_SEM_NAME, O_CREAT);
-	if (read_lock2 == SEM_FAILED){
+	read_lock = sem_open(READER_SEM_NAME, O_CREAT);
+	if (read_lock == SEM_FAILED){
 		perror("Unable to open the read semaphore");
 		return NULL;
 	}
-	rLock2 = sem_wait(read_lock2);
+	rLock2 = sem_wait(read_lock);
 	if (rLock2 == -1){
 		perror("Unable to lock the read semaphore");
 		close(fd);
@@ -276,33 +282,36 @@ char *kv_store_read(char *key){
 	}
 
 	//DECREMENT READER COUNT
-	numReaders = (*table).num_readers;
-	(*table).num_readers = numReaders - 1;
+	numReaders = (*table).num_Readers;
+	(*table).num_Readers = numReaders - 1;
 
-	//OBTAIN WRITE_LOCK
-	if ((*table).num_readers == 1){
-		write_lock2 = sem_open(WRITER_SEM_NAME, O_CREAT);
-		if (write_lock2 == SEM_FAILED){
-			perror("Unable to open the write semaphore");
-			close(fd);
-			munmap(table, SIZE_OF_STORE);
-			return NULL;
-		}
-		wLock2 = sem_wait(write_lock2);
-		if (wLock2 == -1){
-			perror("Unable to lock the write semaphore");
-			close(fd);
-			munmap(table, SIZE_OF_STORE);
+	//RELEASE WRITE_LOCK
+	if ((*table).num_Readers == 0){
+		wUnlock = sem_post(write_lock);
+		if (wUnlock == -1){
+			perror("Unable to unlock the write semaphore");
 			return NULL;
 		}
 	}
 
 	//RELEASE READ_LOCK
-	rUnlock2 = sem_post(read_lock2);
+	rUnlock2 = sem_post(read_lock);
 	if (rUnlock2 == -1){
 		perror("Unable to unlock the read semaphore");
 		close(fd);
 		munmap(table, SIZE_OF_STORE);
+		return NULL;
+	}
+
+	int close1 = sem_close(read_lock);
+	if (close1 == -1){
+		perror("Unable to close the read semaphore");
+		return NULL;
+	}
+
+	int close2 = sem_close(read_lock);
+	if (close2 == -1){
+		perror("Unable to close the read semaphore");
 		return NULL;
 	}
 
@@ -320,16 +329,16 @@ char **kv_store_read_all(char *key){
 	bool keyEntryFound;
 
 	//Semaphore Variables
-	sem_t *read_lock1, *write_lock1, *read_lock2, *write_lock2;
-	int rLock1, wLock1, rUnlock1, rLock2, wLock2, rUnlock2;
+	sem_t *read_lock, *write_lock;
+	int rLock1, rUnlock1, rLock2, rUnlock2, wLock, wUnlock;
 
 	//OBTAIN READ_LOCK
-	read_lock1 = sem_open(READER_SEM_NAME, O_CREAT);
-	if (read_lock1 == SEM_FAILED){
+	read_lock = sem_open(READER_SEM_NAME, O_CREAT);
+	if (read_lock == SEM_FAILED){
 		perror("Unable to open the read semaphore");
 		return NULL;
 	}
-	rLock1 = sem_wait(read_lock1);
+	rLock1 = sem_wait(read_lock);
 	if (rLock1 == -1){
 		perror("Unable to lock the read semaphore");
 		return NULL;
@@ -349,20 +358,20 @@ char **kv_store_read_all(char *key){
 	}
 
 	//INCREMENT READER COUNT
-	numReaders = (*table).num_readers;
-	(*table).num_readers = numReaders + 1;
+	numReaders = (*table).num_Readers;
+	(*table).num_Readers = numReaders + 1;
 
 	//OBTAIN WRITE_LOCK
-	if ((*table).num_readers == 1){
-		write_lock1 = sem_open(WRITER_SEM_NAME, O_CREAT);
-		if (write_lock1 == SEM_FAILED){
+	if ((*table).num_Readers == 1){
+		write_lock = sem_open(WRITER_SEM_NAME, O_CREAT);
+		if (write_lock == SEM_FAILED){
 			perror("Unable to open the write semaphore");
 			close(fd);
 			munmap(table, SIZE_OF_STORE);
 			return NULL;
 		}
-		wLock1 = sem_wait(write_lock1);
-		if (wLock1 == -1){
+		wLock = sem_wait(write_lock);
+		if (wLock == -1){
 			perror("Unable to lock the write semaphore");
 			close(fd);
 			munmap(table, SIZE_OF_STORE);
@@ -371,7 +380,7 @@ char **kv_store_read_all(char *key){
 	}
 
 	//RELEASE READ_LOCK
-	rUnlock1 = sem_post(read_lock1);
+	rUnlock1 = sem_post(read_lock);
 	if (rUnlock1 == -1){
 		perror("Unable to unlock the read semaphore");
 		close(fd);
@@ -411,12 +420,12 @@ char **kv_store_read_all(char *key){
 	munmap(table, SIZE_OF_STORE);
 
 	//OBTAIN READ_LOCK
-	read_lock2 = sem_open(READER_SEM_NAME, O_CREAT);
-	if (read_lock2 == SEM_FAILED){
+	read_lock = sem_open(READER_SEM_NAME, O_CREAT);
+	if (read_lock == SEM_FAILED){
 		perror("Unable to open the read semaphore");
 		return NULL;
 	}
-	rLock2 = sem_wait(read_lock2);
+	rLock2 = sem_wait(read_lock);
 	if (rLock2 == -1){
 		perror("Unable to lock the read semaphore");
 		close(fd);
@@ -425,35 +434,38 @@ char **kv_store_read_all(char *key){
 	}
 
 	//DECREMENT READER COUNT
-	numReaders = (*table).num_readers;
-	(*table).num_readers = numReaders - 1;
+	numReaders = (*table).num_Readers;
+	(*table).num_Readers = numReaders - 1;
 
 	//OBTAIN WRITE_LOCK
-	if ((*table).num_readers == 1){
-		write_lock2 = sem_open(WRITER_SEM_NAME, O_CREAT);
-		if (write_lock2 == SEM_FAILED){
-			perror("Unable to open the write semaphore");
-			close(fd);
-			munmap(table, SIZE_OF_STORE);
-			return NULL;
-		}
-		wLock2 = sem_wait(write_lock2);
-		if (wLock2 == -1){
-			perror("Unable to lock the write semaphore");
-			close(fd);
-			munmap(table, SIZE_OF_STORE);
+	if ((*table).num_Readers == 0){
+		wUnlock = sem_post(write_lock);
+		if (wUnlock == -1){
+			perror("Unable to unlock the write semaphore");
 			return NULL;
 		}
 	}
 
 	//RELEASE READ_LOCK
-	rUnlock2 = sem_post(read_lock2);
+	rUnlock2 = sem_post(read_lock);
 	if (rUnlock2 == -1){
 		perror("Unable to unlock the read semaphore");
 		close(fd);
 		munmap(table, SIZE_OF_STORE);
 		return NULL;
 	}
-	
+
+	int close1 = sem_close(read_lock);
+	if (close1 == -1){
+		perror("Unable to close the read semaphore");
+		return NULL;
+	}
+
+	int close2 = sem_close(read_lock);
+	if (close2 == -1){
+		perror("Unable to close the read semaphore");
+		return NULL;
+	}
+
 	return values;
 }
